@@ -1,6 +1,12 @@
 [package]
-name = "iwent_control_gateway"
+name = "can_modbus_gateway"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+tokio = { version = "1.44.2", features = ["full"] } # Use "full" for simplicity, includes rt-multi-thread, macros, sync, time, net, io-util
+socketcan = "3.5.0"
+tokio-modbus = { version = "0.16.1", features = ["tcp-server", "tcp"] }
+thiserror = "1.0" # For custom error types
+log = "0.4.27"
+env_logger = "0.11" # Optional: simple logger implementation
