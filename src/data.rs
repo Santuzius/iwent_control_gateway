@@ -33,7 +33,7 @@ pub struct BmsData {
     pub max_temperature: Option<u8>,
     pub info: Option<u8>,
     pub soc: Option<u8>,
-    pub current: Option<i16>,
+    pub current: Option<u16>,
     pub total_voltage: Option<u16>,
     pub warning1: Option<u8>, 
     pub warning2: Option<u8>,
@@ -74,8 +74,8 @@ impl BmsData {
                 if data.len() != 8 {
                     return Err(AppError::InvalidCanDataLength { can_id, expected: 8, actual: data.len() });
                 }
-                // Current (data0, data1) - Little Endian, signed? Assuming signed for current.
-                self.current = Some(i16::from_le_bytes(data[0..2].try_into().unwrap()));
+                // Current (data0, data1) - Little Endian
+                self.current = Some(u16::from_le_bytes(data[0..2].try_into().unwrap()));
                 // Total voltage (data2, data3) - Little Endian
                 self.total_voltage = Some(u16::from_le_bytes(data[2..4].try_into().unwrap()));
                 // Warning 1 (data4)
@@ -106,10 +106,7 @@ impl BmsData {
             REG_MAX_TEMPERATURE => self.max_temperature.map(u16::from),
             REG_BMS_INFO => self.info.map(u16::from),
             REG_SOC => self.soc.map(u16::from),
-            // Note: i16 current needs conversion to u16. Modbus often uses two's complement for negative values.
-            // Or, you might decide to only represent positive current or use two registers.
-            // Simple cast here, assumes positive current or client handles two's complement.
-            REG_CURRENT => self.current.map(|v| v as u16),
+            REG_CURRENT => self.current,
             REG_TOTAL_VOLTAGE => self.total_voltage,
             REG_WARNING_1 => self.warning1.map(u16::from),
             REG_WARNING_2 => self.warning2.map(u16::from),
