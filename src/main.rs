@@ -12,7 +12,6 @@ use error::AppError; // Import the AppError type
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
-    // Initialize logger (optional but recommended)
     env_logger::init();
 
     log::info!("Application starting...");
