@@ -55,19 +55,29 @@ async fn main() -> Result<(), AppError> {
     // --- Spawn asynchronous tasks ---
 
     // CAN Receiver tasks
-    let can_rx1_handle = tokio::spawn(can::can_rx(1, Arc::clone(&bms_data1)));
-    let can_rx2_handle = tokio::spawn(can::can_rx(2, Arc::clone(&bms_data2)));
+    let can_rx1_handle = tokio::spawn(can::can_rx(
+        "can0",
+        1, 
+        Arc::clone(&bms_data1)
+    ));
+    let can_rx2_handle = tokio::spawn(can::can_rx(
+        "can0",
+        2, 
+        Arc::clone(&bms_data2)
+    ));
 
     // CAN Transmitter task (placeholder)
-    let can_tx_handle = tokio::spawn(can::can_tx());
+    let can_tx_handle = tokio::spawn(can::can_tx(
+        "can0"
+    ));
 
     // Modbus Server tasks
     let modbus1_handle = tokio::spawn(modbus_server::server(
-        "172.18.143.93:40502", // Address for BMS 1
+        "172.18.143.93:40502", // Address for BMS 1 server
         Arc::clone(&bms_data1),
     ));
     let modbus2_handle = tokio::spawn(modbus_server::server(
-        "172.18.143.93:41502", // Address for BMS 2
+        "172.18.143.93:41502", // Address for BMS 2 server
         Arc::clone(&bms_data2),
     ));
 

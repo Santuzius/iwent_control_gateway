@@ -4,15 +4,13 @@ use socketcan::{CanFilter, CanSocket, Frame, Socket, SocketOptions};
 use std::{sync::{Arc, RwLock}, time::Duration};
 use tokio::time::sleep; // Use tokio's sleep
 
-const CAN_INTERFACE: &str = "can0"; // Use the can0 interface
-
 // --- CAN Receiver Task ---
-pub async fn can_rx(bms_id: u8, bms_data: Arc<RwLock<Option<BmsData>>>) -> Result<(), AppError> {
+pub async fn can_rx(can_if: &str, bms_id: u8, bms_data: Arc<RwLock<Option<BmsData>>>) -> Result<(), AppError> {
     log::info!("Starting CAN RX task for BMS ID {}", bms_id);
 
     // Open the CAN socket
-    let socket = CanSocket::open(CAN_INTERFACE)?;
-    log::info!("Opened CAN socket on {} for BMS ID {}", CAN_INTERFACE, bms_id);
+    let socket = CanSocket::open(can_if)?;
+    log::info!("Opened CAN socket on {} for BMS ID {}", can_if, bms_id);
 
     // Define CAN IDs to filter for based on bms_id
     let can_id1: u32 = if bms_id == 1 { 0xB101 } else { 0xB102 };
@@ -78,10 +76,10 @@ pub async fn can_rx(bms_id: u8, bms_data: Arc<RwLock<Option<BmsData>>>) -> Resul
 
 
 // --- CAN Transmitter Task (Placeholder) ---
-pub async fn can_tx() -> Result<(), AppError> {
+pub async fn can_tx(can_if: &str) -> Result<(), AppError> {
     log::info!("Starting CAN TX task (placeholder)");
     // In a real application, you would open a CANSocket here
-    // let socket = CANSocket::open(CAN_INTERFACE)?;
+    // let socket = CANSocket::open(can_if)?;
     loop {
         // Placeholder loop - implement sending logic if required
         // For example, read from a channel or queue and send frames:
