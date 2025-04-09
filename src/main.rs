@@ -18,8 +18,39 @@ async fn main() -> Result<(), AppError> {
 
     // Create shared data structures with thread-safe access
     // Initialized to None, as no data has been received yet
-    let bms_data1: Arc<RwLock<Option<BmsData>>> = Arc::new(RwLock::new(None));
-    let bms_data2: Arc<RwLock<Option<BmsData>>> = Arc::new(RwLock::new(None));
+    let bms_data1: Arc<RwLock<Option<BmsData>>> = Arc::new(RwLock::new(Some(BmsData {
+        min_cell_voltage: Some(0),
+        max_cell_voltage: Some(0),
+        min_temperature: Some(0),
+        max_temperature: Some(0),
+        info: Some(0xFF),
+        soc: Some(0),
+        current: Some(0),
+        total_voltage: Some(0),
+        warning1: Some(0),
+        warning2: Some(0),
+        error1: Some(0xFF),
+        error2: Some(0xFF),
+        on: Some(0),
+        quit: Some(0),
+    })));
+
+    let bms_data2: Arc<RwLock<Option<BmsData>>> = Arc::new(RwLock::new(Some(BmsData {
+        min_cell_voltage: Some(0),
+        max_cell_voltage: Some(0),
+        min_temperature: Some(0),
+        max_temperature: Some(0),
+        info: Some(0xFF),
+        soc: Some(0),
+        current: Some(0),
+        total_voltage: Some(0),
+        warning1: Some(0),
+        warning2: Some(0),
+        error1: Some(0xFF),
+        error2: Some(0xFF),
+        on: Some(0),
+        quit: Some(0),
+    })));
 
     // --- Spawn asynchronous tasks ---
 

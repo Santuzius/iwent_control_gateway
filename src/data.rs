@@ -104,14 +104,14 @@ impl BmsData {
             // Note: u8 values are cast to u16 for Modbus registers
             REG_MIN_TEMPERATURE => self.min_temperature.map(u16::from),
             REG_MAX_TEMPERATURE => self.max_temperature.map(u16::from),
-            REG_BMS_INFO => self.info.map(u16::from),
+            REG_BMS_INFO => Some(self.info.map(u16::from).unwrap_or(0xFF)),
             REG_SOC => self.soc.map(u16::from),
             REG_CURRENT => self.current,
             REG_TOTAL_VOLTAGE => self.total_voltage,
             REG_WARNING_1 => self.warning1.map(u16::from),
             REG_WARNING_2 => self.warning2.map(u16::from),
-            REG_ERROR_1 => self.error1.map(u16::from),
-            REG_ERROR_2 => self.error2.map(u16::from),
+            REG_ERROR_1 => Some(self.info.map(u16::from).unwrap_or(0xFF)),
+            REG_ERROR_2 => Some(self.info.map(u16::from).unwrap_or(0xFF)),
             REG_ON => self.on.map(u16::from),
             REG_QUIT => self.quit.map(u16::from),
             _ => None, // Address out of defined range
