@@ -1,6 +1,7 @@
 // src/error.rs
 use thiserror::Error;
 use std::io;
+use tokio::sync::{broadcast, mpsc}; // For channel send errors
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -26,6 +27,25 @@ pub enum AppError {
     #[error("Task join error: {0}")]
     JoinError(#[from] tokio::task::JoinError),
 
+    // --- New Errors ---
+    #[error("GPIO error: {0}")]
+    Gpio(#[from] rppal::gpio::Error),
+
+    #[error("GPIO unavailable on this platform")]
+    GpioUnavailable, // For non-Pi builds
+
+    #[error("Broadcast channel send error: {0}")]
+    BroadcastSendError(#[from] broadcast::error::SendError<crate::SystemCommand>), // Use specific command type
+
+    #[error("MPSC channel send error (GPIO state): {0}")]
+    MpscSendErrorGpio(#[from] mpsc::error::SendError<bool>),
+
+    #[error("Modbus client connection error: {0}")]
+    ModbusClientConnection(io::Error), // Specific error for client connection issues
+
+    #[error("Modbus client operation error: {0}")]
+    ModbusClientOperation(#[from] tokio_modbus::prelude::ExceptionCode),
+
     // Add other specific error types as needed
     #[error("Unknown error")]
     _Unknown,
@@ -36,12 +56,4 @@ impl<T> From<std::sync::PoisonError<T>> for AppError {
     fn from(_: std::sync::PoisonError<T>) -> Self {
         AppError::LockPoisoned
     }
-}
-
-// Explicit conversion for Modbus IO errors if tokio-modbus doesn't use std::io::Error directly in its public API often
-impl From<tokio_modbus::prelude::ExceptionCode> for AppError {
-   fn from(e: tokio_modbus::prelude::ExceptionCode) -> Self {
-       // You might want to inspect the inner error type here for more specific mapping
-       AppError::ModbusIo(io::Error::new(io::ErrorKind::Other, format!("Modbus Slave IO Error: {}", e)))
-   }
 }
