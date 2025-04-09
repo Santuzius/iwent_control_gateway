@@ -17,7 +17,6 @@ async fn main() -> Result<(), AppError> {
     log::info!("Application starting...");
 
     // Create shared data structures with thread-safe access
-    // Initialized to None, as no data has been received yet
     let bms_data1: Arc<RwLock<Option<BmsData>>> = Arc::new(RwLock::new(Some(BmsData {
         min_cell_voltage: Some(0),
         max_cell_voltage: Some(0),
