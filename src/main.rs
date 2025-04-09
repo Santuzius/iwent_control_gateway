@@ -55,14 +55,8 @@ async fn main() -> Result<(), AppError> {
     // --- Spawn asynchronous tasks ---
 
     // CAN Receiver tasks
-    let can_rx1_handle = tokio::spawn(can::can_rx(
-        1, 
-        Arc::clone(&bms_data1)
-    ));
-    let can_rx2_handle = tokio::spawn(can::can_rx(
-        2, 
-        Arc::clone(&bms_data2)
-    ));
+    let can_rx1_handle = tokio::spawn(can::can_rx(1, Arc::clone(&bms_data1)));
+    let can_rx2_handle = tokio::spawn(can::can_rx(2, Arc::clone(&bms_data2)));
 
     // CAN Transmitter task (placeholder)
     let can_tx_handle = tokio::spawn(can::can_tx());
