@@ -135,7 +135,6 @@ pub async fn server(addr_str: &str, bms_data: Arc<RwLock<Option<BmsData>>>) -> R
 
     // Create the new_service closure which clones bms_data
     let new_service = {
-        let bms_data = Arc::clone(&bms_data);
         move |_socket_addr: SocketAddr| {
             Ok(Some(BmsModbusService {
                 bms_data: Arc::clone(&bms_data),
@@ -148,7 +147,6 @@ pub async fn server(addr_str: &str, bms_data: Arc<RwLock<Option<BmsData>>>) -> R
 
     // Define on_connected so that it clones new_service for each new connection
     let on_connected = {
-        let new_service = Arc::clone(&new_service);
         move |stream, socket_addr| {
             // Clone new_service again here so it's available inside the async block
             let new_service = Arc::clone(&new_service);
