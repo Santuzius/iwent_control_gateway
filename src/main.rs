@@ -74,28 +74,28 @@ async fn main() -> Result<(), AppError> {
 
     log::info!("Spawning CAN and Modbus Server tasks...");
     // CAN Receiver tasks
-    let can_rx1_handle = tokio::spawn(can::can_rx(
+    let can_rx1_handle = tokio::spawn(can::rx_task(
         "can0",
         1, 
         Arc::clone(&bms_data1)
     ));
-    let can_rx2_handle = tokio::spawn(can::can_rx(
+    let can_rx2_handle = tokio::spawn(can::rx_task(
         "can0",
         2, 
         Arc::clone(&bms_data2)
     ));
 
     // CAN Transmitter task (placeholder)
-    let can_tx_handle = tokio::spawn(can::can_tx(
+    let can_tx_handle = tokio::spawn(can::tx_task(
         "can0"
     ));
 
     // Modbus Server tasks
-    let modbus_server1_handle = tokio::spawn(modbus_server::server(
+    let modbus_server1_handle = tokio::spawn(modbus_server::task(
         "172.18.143.93:40502", // Address for BMS 1 server
         Arc::clone(&bms_data1),
     ));
-    let modbus_server2_handle = tokio::spawn(modbus_server::server(
+    let modbus_server2_handle = tokio::spawn(modbus_server::task(
         "172.18.143.93:41502", // Address for BMS 2 server
         Arc::clone(&bms_data2),
     ));
@@ -104,21 +104,21 @@ async fn main() -> Result<(), AppError> {
     log::info!("Spawning GPIO and Modbus Client tasks...");
 
     // GPIO Input Task
-    let gp_in_handle = tokio::spawn(gpio::input(
+    let gp_in_handle = tokio::spawn(gpio::input_task(
         gpio_tx
     ));
 
     // GPIO Output Task (subscribes to broadcast channel)
-    let gp_out_handle = tokio::spawn(gpio::output(
+    let gp_out_handle = tokio::spawn(gpio::output_task(
         main_cmd_tx.subscribe()
     ));
 
     // Modbus Client Tasks (each subscribes to broadcast channel)
-    let modbus_client1_handle = tokio::spawn(modbus_client::client(
+    let modbus_client1_handle = tokio::spawn(modbus_client::task(
         "192.168.2.100:30502", // Inverter 1 Address
         main_cmd_tx.subscribe(),
     ));
-    let modbus_client2_handle = tokio::spawn(modbus_client::client(
+    let modbus_client2_handle = tokio::spawn(modbus_client::task(
         "192.168.2.100:31502", // Inverter 2 Address
         main_cmd_tx.subscribe(),
     ));

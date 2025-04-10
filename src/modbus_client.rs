@@ -23,7 +23,7 @@ const INVERTER_OFF_UNKNOWN2_VALUE: u16 = 0;
 const SLAVE_ID: Slave = Slave(1); // Default Modbus Slave ID, adjust if needed
 
 // --- Modbus Client Task ---
-pub async fn client(
+pub async fn task(
     addr_str: &str,
     mut rx: broadcast::Receiver<SystemCommand>,
 ) -> Result<(), AppError> {

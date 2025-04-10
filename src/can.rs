@@ -5,7 +5,7 @@ use std::{sync::{Arc, RwLock}, time::Duration};
 use tokio::time::sleep; // Use tokio's sleep
 
 // --- CAN Receiver Task ---
-pub async fn can_rx(can_if: &str, bms_id: u8, bms_data: Arc<RwLock<Option<BmsData>>>) -> Result<(), AppError> {
+pub async fn rx_task(can_if: &str, bms_id: u8, bms_data: Arc<RwLock<Option<BmsData>>>) -> Result<(), AppError> {
     log::info!("Starting CAN RX task for BMS ID {}", bms_id);
 
     // Open the CAN socket
@@ -76,7 +76,7 @@ pub async fn can_rx(can_if: &str, bms_id: u8, bms_data: Arc<RwLock<Option<BmsDat
 
 
 // --- CAN Transmitter Task (Placeholder) ---
-pub async fn can_tx(can_if: &str) -> Result<(), AppError> {
+pub async fn tx_task(can_if: &str) -> Result<(), AppError> {
     log::info!("Starting CAN TX task (placeholder)");
     // In a real application, you would open a CANSocket here
     // let socket = CANSocket::open(can_if)?;

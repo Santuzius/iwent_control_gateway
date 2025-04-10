@@ -173,7 +173,7 @@ impl tokio_modbus::server::Service for BmsModbusService {
 
 // --- Modbus Server Task ---
 // Using the server setup structure provided in the user's code snippet
-pub async fn server(
+pub async fn task(
     addr_str: &str,
     bms_data: Arc<RwLock<Option<BmsData>>>,
 ) -> Result<(), AppError> {

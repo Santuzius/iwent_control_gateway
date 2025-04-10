@@ -14,7 +14,7 @@ const OUTPUT_PIN_BCM: u8 = 22; // BCM GPIO 22 is Pin 15
 const DEBOUNCE_MS: u64 = 25;
 
 // --- GPIO Input Task (Reads Pin 13) ---
-pub async fn input(tx: mpsc::Sender<bool>) -> Result<(), AppError> {
+pub async fn input_task(tx: mpsc::Sender<bool>) -> Result<(), AppError> {
     #[cfg(any(target_arch = "arm", target_arch="aarch64"))]
     {
         log::info!("Starting GPIO input task on BCM Pin {}", INPUT_PIN_BCM);
@@ -97,7 +97,7 @@ pub async fn input(tx: mpsc::Sender<bool>) -> Result<(), AppError> {
 
 
 // --- GPIO Output Task (Controls Pin 22 - LED) ---
-pub async fn output(mut rx: broadcast::Receiver<SystemCommand>) -> Result<(), AppError> {
+pub async fn output_task(mut rx: broadcast::Receiver<SystemCommand>) -> Result<(), AppError> {
     #[cfg(any(target_arch = "arm", target_arch="aarch64"))]
     {
         log::info!("Starting GPIO output task on BCM Pin {}", OUTPUT_PIN_BCM);
