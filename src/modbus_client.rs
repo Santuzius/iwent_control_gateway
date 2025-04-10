@@ -60,7 +60,7 @@ pub async fn task(
                     match result {
                         Ok(command) => {
                             log::debug!("Modbus Client ({}): Received command: {:?}", socket_addr, command);
-                            if command == SystemCommand::InvertersOff {
+                            if command == SystemCommand::Off {
                                 log::info!("Modbus Client ({}): Executing OFF sequence...", socket_addr);
                                 // Perform writes
                                 let writes = [
@@ -90,7 +90,7 @@ pub async fn task(
                                      // If a write failed but didn't disconnect, we are still in the inner loop
                                 }
 
-                            } else if command == SystemCommand::InvertersOn {
+                            } else if command == SystemCommand::On {
                                 // "do nothing" as per requirement
                                 log::info!("Modbus Client ({}): Received ON command (no action needed).", socket_addr);
                             }

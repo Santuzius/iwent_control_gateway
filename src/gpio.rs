@@ -144,8 +144,9 @@ pub async fn output_task(mut rx: broadcast::Receiver<SystemCommand>) -> Result<(
                   Ok(command) => {
                      log::info!("GPIO Output (Placeholder): Received command: {:?}", command);
                      match command {
-                          SystemCommand::InvertersOff => log::info!("GPIO Output (Placeholder): Would set Pin {} HIGH", OUTPUT_PIN_BCM),
-                          SystemCommand::InvertersOn => log::info!("GPIO Output (Placeholder): Would set Pin {} LOW", OUTPUT_PIN_BCM),
+                          SystemCommand::Off => log::info!("GPIO Output (Placeholder): Would set Pin {} HIGH", OUTPUT_PIN_BCM),
+                          SystemCommand::On => log::info!("GPIO Output (Placeholder): Would set Pin {} LOW", OUTPUT_PIN_BCM),
+                          _ => ()
                      }
                   }
                   Err(broadcast::error::RecvError::Closed) => {

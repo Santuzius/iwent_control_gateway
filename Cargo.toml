@@ -11,3 +11,4 @@ thiserror = "2.0.12" # For custom error types
 log = "0.4.27"
 env_logger = "0.11.8"
 rppal = "0.22.1"
+crossbeam_channel = "0.5.15"

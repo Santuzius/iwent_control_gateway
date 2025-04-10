@@ -43,6 +43,8 @@ pub struct BmsData {
     // Fields to store values written via Modbus
     pub on: Option<u8>,
     pub quit: Option<u8>,
+    // Control freeze flag
+    pub control_frozen: Option<bool>,
 }
 
 impl BmsData {
@@ -136,8 +138,13 @@ impl BmsData {
                 // Validate if the u16 value fits into u8
                 match u8::try_from(value) {
                     Ok(val_u8) => {
-                        self.on = Some(val_u8);
-                        log::info!("Set REG_ON (addr {}) to {}", address, val_u8);
+                        if self.control_frozen.unwrap_or(false) {
+                            log::info!("Set REG_ON (addr {}) to {}", address, val_u8);
+                            self.on = Some(val_u8);
+                        } else {
+                            log::warn!("Attempt to set frozen REG_ON (addr {}) rejected", address);
+                        }
+                        
                         Ok(())
                     }
                     Err(_) => {
@@ -154,8 +161,13 @@ impl BmsData {
                 // Validate if the u16 value fits into u8
                 match u8::try_from(value) {
                     Ok(val_u8) => {
-                        self.quit = Some(val_u8);
-                        log::info!("Set REG_QUIT (addr {}) to {}", address, val_u8);
+                        if self.control_frozen.unwrap_or(false) {
+                            log::info!("Set REG_QUIT (addr {}) to {}", address, val_u8);
+                            self.on = Some(val_u8);
+                        } else {
+                            log::warn!("Attempt to set frozen REG_QUIT (addr {}) rejected", address);
+                        }
+
                         Ok(())
                     }
                     Err(_) => {
