@@ -5,7 +5,6 @@ use crate::error::AppError;
 use crate::SystemCommand; // Import the command enum from main or a shared module
 use rppal::gpio::{Gpio, InputPin, Level, OutputPin, Trigger};
 use std::time::Duration;
-use tokio::sync::{broadcast, mpsc};
 use tokio::time::sleep;
 
 // --- Configuration ---
@@ -14,7 +13,7 @@ const OUTPUT_PIN_BCM: u8 = 22; // BCM GPIO 22 is Pin 15
 const DEBOUNCE_MS: u64 = 25;
 
 // --- GPIO Input Task (Reads Pin 13) ---
-pub async fn input_task(tx: mpsc::Sender<bool>) -> Result<(), AppError> {
+pub async fn input_task(input_tx: std::sync::mpsc::Sender<SystemCommand>) -> Result<(), AppError> {
     #[cfg(any(target_arch = "arm", target_arch="aarch64"))]
     {
         log::info!("Starting GPIO input task on BCM Pin {}", INPUT_PIN_BCM);
@@ -97,7 +96,7 @@ pub async fn input_task(tx: mpsc::Sender<bool>) -> Result<(), AppError> {
 
 
 // --- GPIO Output Task (Controls Pin 22 - LED) ---
-pub async fn output_task(mut rx: broadcast::Receiver<SystemCommand>) -> Result<(), AppError> {
+pub async fn output_task(mut error_rx: crossbeam_channel::Receiver<()>, mut output_rx: crossbeam_channel::Receiver<SystemCommand>) -> Result<(), AppError> {
     #[cfg(any(target_arch = "arm", target_arch="aarch64"))]
     {
         log::info!("Starting GPIO output task on BCM Pin {}", OUTPUT_PIN_BCM);

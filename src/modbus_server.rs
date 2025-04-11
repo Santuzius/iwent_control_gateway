@@ -1,7 +1,7 @@
 // src/modbus_server.rs
 use crate::{
     data::BmsData, // Import specific register constants
-    error::AppError,
+    error::AppError, SystemCommand,
 };
 use std::{
     future::Future,
@@ -176,6 +176,7 @@ impl tokio_modbus::server::Service for BmsModbusService {
 pub async fn task(
     addr_str: &str,
     bms_data: Arc<RwLock<Option<BmsData>>>,
+    input_tx: std::sync::mpsc::Sender<SystemCommand>
 ) -> Result<(), AppError> {
     let socket_addr: SocketAddr = addr_str.parse().unwrap();
     log::info!("Starting Modbus TCP server on {}", socket_addr);

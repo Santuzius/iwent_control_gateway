@@ -1,6 +1,6 @@
 // src/main.rs
-use std::sync::{mpsc::Receiver, Arc, RwLock};
-use tokio::{signal, sync::{broadcast, mpsc}}; // For graceful shutdown on Ctrl+C
+use std::sync::{Arc, RwLock};
+use tokio::signal; // For graceful shutdown on Ctrl+C
 use tokio::time::{sleep, Duration};
 
 mod can;
@@ -48,11 +48,11 @@ async fn reset_control_frozen(
 async fn input_flag_manager_task(
     bms_data1: Arc<RwLock<Option<BmsData>>>,
     bms_data2: Arc<RwLock<Option<BmsData>>>,
-    rx: Receiver<SystemCommand>,
-    tx: broadcast::Sender<SystemCommand>
+    mut input_rx: std::sync::mpsc::Receiver<SystemCommand>,
+    output_tx: crossbeam_channel::Sender<SystemCommand>
 )  -> Result<(), AppError> {
 
-    for msg in rx.iter() {
+    for msg in input_rx.iter() {
         let control_frozen1;
         {
             let data_guard1 = bms_data1.read().map_err(|_| {
@@ -116,7 +116,7 @@ async fn input_flag_manager_task(
                     log::error!("Error resetting control_frozen: {}", e);
                 }
             });
-            tx.send(msg);
+            output_tx.send(msg);
         }
     }
 
@@ -169,18 +169,18 @@ async fn main() -> Result<(), AppError> {
     // --- Create Communication Channels ---
 
     // 1. Channel for system commands from input
-    let (input_tx1, mut input_rx) = mpsc::channel::<SystemCommand>(128);
+    let (input_tx1, mut input_rx) = std::sync::mpsc::channel::<SystemCommand>();
     let input_tx2 = input_tx1.clone();
     let input_tx3 = input_tx2.clone();
 
     // 1. Channel for errors from CAN
-    let (error_tx1, mut error_rx1) = crossbeam_channel::unbounded();
+    let (error_tx1, mut error_rx1) = crossbeam_channel::unbounded::<()>();
     let error_tx2 = error_tx1.clone();
     let mut error_rx2 = error_rx1.clone();
     let mut error_rx3 = error_rx2.clone();
 
     // 2. Broadcast Channel for system commands to output
-    let (output_tx, mut output_rx1) = crossbeam_channel::unbounded();
+    let (output_tx, mut output_rx1) = crossbeam_channel::unbounded::<SystemCommand>();
     let mut output_rx2 = output_rx1.clone();
     let mut output_rx3 = output_rx2.clone();
     let mut output_rx4 = output_rx3.clone();
@@ -193,13 +193,13 @@ async fn main() -> Result<(), AppError> {
         "can0",
         1, 
         Arc::clone(&bms_data1),
-        error_tx1
+        error_tx1,
     ));
     let can_rx2_handle = tokio::spawn(can::rx_task(
         "can0",
         2, 
         Arc::clone(&bms_data2),
-        error_tx2
+        error_tx2,
     ));
 
     // GPIO Input Task
@@ -247,14 +247,14 @@ async fn main() -> Result<(), AppError> {
 
     log::info!("Spawning input flag manager task...");
 
-    let input_flag_manager_handle = tokio::spawn(gpio::input_flag_manager_task(
+    let input_flag_manager_handle = tokio::spawn(input_flag_manager_task(
         Arc::clone(&bms_data1),
         Arc::clone(&bms_data2),
         input_rx,
         output_tx
     ));
 
-    log::info!("All tasks spawned. Running main control loop.");
+    log::info!("All tasks spawned.");
 
     // --- Main Control Loop ---
     // This loop waits for state changes from the GPIO input task

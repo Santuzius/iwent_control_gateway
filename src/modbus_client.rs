@@ -25,7 +25,8 @@ const SLAVE_ID: Slave = Slave(1); // Default Modbus Slave ID, adjust if needed
 // --- Modbus Client Task ---
 pub async fn task(
     addr_str: &str,
-    mut rx: broadcast::Receiver<SystemCommand>,
+    mut error_rx: crossbeam_channel::Receiver<()>,
+    output_rx: crossbeam_channel::Receiver<SystemCommand>
 ) -> Result<(), AppError> {
     let socket_addr: SocketAddr = addr_str.parse().unwrap();
     log::info!("Starting Modbus TCP client task for {}", socket_addr);
