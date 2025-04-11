@@ -48,7 +48,7 @@ async fn reset_control_frozen(
 async fn input_flag_manager_task(
     bms_data1: Arc<RwLock<Option<BmsData>>>,
     bms_data2: Arc<RwLock<Option<BmsData>>>,
-    mut input_rx: std::sync::mpsc::Receiver<SystemCommand>,
+    input_rx: std::sync::mpsc::Receiver<SystemCommand>,
     output_tx: crossbeam_channel::Sender<SystemCommand>
 )  -> Result<(), AppError> {
 

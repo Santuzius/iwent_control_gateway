@@ -1,6 +1,6 @@
 // src/can.rs
 use crate::{data::BmsData, error::AppError, SystemCommand};
-use socketcan::{CanFilter, CanSocket, Frame, Socket, SocketOptions};
+use socketcan::{frame::AsPtr, EmbeddedFrame, StandardId, CanFrame, CanFilter, CanSocket, Frame, Socket, SocketOptions};
 use std::{sync::{Arc, RwLock}, time::Duration};
 use tokio::time::sleep; // Use tokio's sleep
 
@@ -44,6 +44,18 @@ pub async fn rx_task(can_if: &str, bms_id: u8, bms_data: Arc<RwLock<Option<BmsDa
                             log::error!("BMS {}: Failed to update data from CAN frame: {}", bms_id, e);
                         } else {
                              log::debug!("BMS {}: Successfully updated data for CAN ID {:#X}", bms_id, frame.raw_id());
+
+                             let can_id = frame.raw_id(); // Use id() method
+                            
+                             match can_id {
+                                0xB201 | 0xB202 => {
+                                    let data = frame.as_bytes(); // Use data() method
+                                    if data[6] != 0 || data[7] != 0 {
+                                        error_tx.send(());
+                                    }
+                                },
+                                _ => {}
+                             };
                         }
                     }
                     Err(e) => {
@@ -75,18 +87,51 @@ pub async fn rx_task(can_if: &str, bms_id: u8, bms_data: Arc<RwLock<Option<BmsDa
 }
 
 
-// --- CAN Transmitter Task (Placeholder) ---
-pub async fn tx_task(can_if: &str, output_rx: crossbeam_channel::Receiver<SystemCommand>) -> Result<(), AppError> {
-    log::info!("Starting CAN TX task (placeholder)");
-    // In a real application, you would open a CANSocket here
-    // let socket = CANSocket::open(can_if)?;
+// --- CAN Transmitter Task  ---
+pub async fn tx_task(
+    can_if: &str,
+    output_rx: crossbeam_channel::Receiver<SystemCommand>,
+) -> Result<(), AppError> {
+    log::info!("Starting CAN TX task");
+    let socket = CanSocket::open(can_if)?;
+
     loop {
-        // Placeholder loop - implement sending logic if required
-        // For example, read from a channel or queue and send frames:
-        // let frame_to_send = ...;
-        // socket.write_frame(&frame_to_send)?;
-        log::debug!("CAN TX task running (no frames sent)");
-        sleep(Duration::from_secs(10)).await; // Prevent busy-looping
+        match output_rx.recv() {
+            Ok(command) => {
+                match command {
+                    SystemCommand::Off => {
+                        let id: StandardId = StandardId::new(0xA300)
+                            .expect("Invalid CAN id for StandardId");
+                        let frame = CanFrame::new(
+                            id, 
+                            &[0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B]).unwrap();
+                        socket.write_frame(&frame)?;
+                    }
+                    SystemCommand::On => {
+                        let id: StandardId = StandardId::new(0xA300)
+                        .expect("Invalid CAN id for StandardId");
+                        let frame = CanFrame::new(
+                            id, 
+                            &[0x20, 0x20, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B]).unwrap();
+                        socket.write_frame(&frame)?;
+                    }
+                    SystemCommand::Quit => {
+                        let id: StandardId = StandardId::new(0xA100)
+                        .expect("Invalid CAN id for StandardId");
+                        let frame = CanFrame::new(
+                            id, 
+                            &[0x20, 0x20, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B, 0x0B]).unwrap();
+                        socket.write_frame(&frame)?;
+                        log::info!("CAN TX task received Quit command, exiting.");
+                        break;
+                    }
+                }
+            }
+            Err(_) => {
+                log::error!("Error receiving command, CAN TX task might exit.");
+                break;
+            }
+        }
     }
-    // Ok(()) // Or return an error if the loop exits unexpectedly
+    Ok(())
 }
