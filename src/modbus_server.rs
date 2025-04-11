@@ -20,6 +20,7 @@ use tokio_modbus::{
 #[derive(Debug, Clone)] // Added Clone trait, needed for the service factory pattern
 struct BmsModbusService {
     bms_data: Arc<RwLock<Option<BmsData>>>,
+    input_tx: std::sync::mpsc::Sender<SystemCommand>
 }
 
 // Implement Service trait
@@ -33,6 +34,7 @@ impl tokio_modbus::server::Service for BmsModbusService {
     fn call(&self, req: Self::Request) -> Self::Future {
         // Clone Arc for use in the async block
         let data_lock = Arc::clone(&self.bms_data);
+        let input_tx = self.input_tx.clone();
 
         Box::pin(async move {
             log::debug!("Received Modbus request: {:?}", req);
@@ -156,6 +158,16 @@ impl tokio_modbus::server::Service for BmsModbusService {
                             );
                             return Err(e); // Return the specific error
                         }
+                        if current_addr == 21 {
+                            if *value == 0 {
+                                input_tx.send(SystemCommand::Off);
+                            }
+                            else {
+                                input_tx.send(SystemCommand::On);
+                            }
+                        } else if  current_addr == 22 && *value != 0 {
+                            input_tx.send(SystemCommand::Quit);
+                        }
                     }
                     Ok(Response::WriteMultipleRegisters(addr, values.len() as u16))
                     // Err(ExceptionCode::IllegalFunction)
@@ -192,6 +204,7 @@ pub async fn task(
         Ok(Some(BmsModbusService {
             // Clone the Arc here, so the new service instance gets a pointer to the shared data
             bms_data: Arc::clone(&bms_data),
+            input_tx: input_tx.clone()
         }))
     };
 
