@@ -169,21 +169,21 @@ async fn main() -> Result<(), AppError> {
     // --- Create Communication Channels ---
 
     // 1. Channel for system commands from input
-    let (input_tx1, mut input_rx) = std::sync::mpsc::channel::<SystemCommand>();
+    let (input_tx1, input_rx) = std::sync::mpsc::channel::<SystemCommand>();
     let input_tx2 = input_tx1.clone();
     let input_tx3 = input_tx2.clone();
 
     // 1. Channel for errors from CAN
-    let (error_tx1, mut error_rx1) = crossbeam_channel::unbounded::<()>();
+    let (error_tx1, error_rx1) = crossbeam_channel::unbounded::<()>();
     let error_tx2 = error_tx1.clone();
-    let mut error_rx2 = error_rx1.clone();
-    let mut error_rx3 = error_rx2.clone();
+    let error_rx2 = error_rx1.clone();
+    let error_rx3 = error_rx2.clone();
 
     // 2. Broadcast Channel for system commands to output
-    let (output_tx, mut output_rx1) = crossbeam_channel::unbounded::<SystemCommand>();
-    let mut output_rx2 = output_rx1.clone();
-    let mut output_rx3 = output_rx2.clone();
-    let mut output_rx4 = output_rx3.clone();
+    let (output_tx, output_rx1) = crossbeam_channel::unbounded::<SystemCommand>();
+    let output_rx2 = output_rx1.clone();
+    let output_rx3 = output_rx2.clone();
+    let output_rx4 = output_rx3.clone();
 
     // --- Spawn asynchronous tasks ---
     log::info!("Spawning input tasks...");
