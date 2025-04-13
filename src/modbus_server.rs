@@ -160,13 +160,13 @@ impl tokio_modbus::server::Service for BmsModbusService {
                         }
                         if current_addr == 21 {
                             if *value == 0 {
-                                input_tx.send(SystemCommand::Off);
+                                let _ = input_tx.send(SystemCommand::Off);
                             }
                             else {
-                                input_tx.send(SystemCommand::On);
+                                let _ = input_tx.send(SystemCommand::On);
                             }
                         } else if  current_addr == 22 && *value != 0 {
-                            input_tx.send(SystemCommand::Quit);
+                            let _ = input_tx.send(SystemCommand::Quit);
                         }
                     }
                     Ok(Response::WriteMultipleRegisters(addr, values.len() as u16))

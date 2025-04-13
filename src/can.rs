@@ -51,7 +51,7 @@ pub async fn rx_task(can_if: &str, bms_id: u8, bms_data: Arc<RwLock<Option<BmsDa
                                 0xB201 | 0xB202 => {
                                     let data = frame.as_bytes(); // Use data() method
                                     if data[6] != 0 || data[7] != 0 {
-                                        error_tx.send(());
+                                        let _ = error_tx.send(());
                                     }
                                 },
                                 _ => {}

@@ -43,7 +43,7 @@ where
             val,
             reg
         );
-        ctx.write_single_register(*reg, *val).await?;
+        let _ = ctx.write_single_register(*reg, *val).await?;
         sleep(Duration::from_millis(50)).await;
     }
 

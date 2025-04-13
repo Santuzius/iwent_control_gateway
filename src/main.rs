@@ -116,7 +116,7 @@ async fn input_flag_manager_task(
                     log::error!("Error resetting control_frozen: {}", e);
                 }
             });
-            output_tx.send(msg);
+            let _ = output_tx.send(msg);
         }
     }
 
@@ -263,8 +263,8 @@ async fn main() -> Result<(), AppError> {
         tokio::select! {
               // Handle Ctrl+C signal for graceful shutdown
               _ = signal::ctrl_c() => {
-                 log::info!("Main: Ctrl+C received. Shutting down.");
-                 break; // Exit the main loop
+                log::info!("Main: Ctrl+C received. Shutting down.");
+                break; // Exit the main loop
               }
               // Add other conditions or timeouts if needed
         }
