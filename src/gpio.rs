@@ -1,163 +1,172 @@
 // src/gpio.rs
-#![allow(unused_imports, dead_code)] // Allow unused imports/code if compiling on non-Pi
 
-use crate::error::AppError;
 use crate::SystemCommand; // Import the command enum from main or a shared module
-use rppal::gpio::{Gpio, InputPin, Level, OutputPin, Trigger};
+use crate::error::AppError;
 use std::time::Duration;
+use rppal::gpio::Gpio;
 use tokio::time::sleep;
 
-// --- Configuration ---
-const INPUT_PIN_BCM: u8 = 13; // BCM GPIO 13 is Pin 33
-const OUTPUT_PIN_BCM: u8 = 22; // BCM GPIO 22 is Pin 15
-const DEBOUNCE_MS: u64 = 25;
+// --- GPIO Pin Definitions ---
+const PIN_OFF: u8 = 13;
+const PIN_ON: u8 = 6;
+const PIN_QUIT: u8 = 16;
+const PIN_RED_LED: u8 = 22;
+const PIN_GREEN_LED: u8 = 23;
 
-// --- GPIO Input Task (Reads Pin 13) ---
+// Debounce time for inputs
+const DEBOUNCE_DURATION: Duration = Duration::from_millis(25);
+// Poll interval to check button state - adjust as needed
+const POLL_INTERVAL: Duration = Duration::from_millis(50);
+
+// --- GPIO Input Task (unverändert) ---
+/// Monitors GPIO input pins for On, Off, and Quit signals and sends corresponding SystemCommands.
 pub async fn input_task(input_tx: std::sync::mpsc::Sender<SystemCommand>) -> Result<(), AppError> {
-    #[cfg(any(target_arch = "arm", target_arch="aarch64"))]
     {
-        log::info!("Starting GPIO input task on BCM Pin {}", INPUT_PIN_BCM);
-        let gpio = Gpio::new()?;
-        let mut pin = gpio.get(INPUT_PIN_BCM)?.into_input_pullup(); // Changed to pullup as requested for detecting a LOW signal
-        pin.set_interrupt(Trigger::Both)?; // Trigger on rising and falling edges for state changes
+        log::info!("Initializing GPIO input task for Raspberry Pi...");
+        // Initialize GPIO
+        let gpio = Gpio::new().map_err(AppError::Gpio)?;
 
-        // Store last known stable state
-        let mut last_state = pin.read() == Level::High; // Read initial state
+        // Configure input pins with pull-down resistors
+        // Rppal doesn't have built-in debounce config, so we handle it manually after reading.
+        let pin_off = gpio.get(PIN_OFF)
+            .map_err( AppError::Gpio)?
+            .into_input_pulldown();
+        let pin_on = gpio.get(PIN_ON)
+            .map_err( AppError::Gpio)?
+            .into_input_pulldown();
+        let pin_quit = gpio.get(PIN_QUIT)
+            .map_err( AppError::Gpio)?
+            .into_input_pulldown();
 
-        // Send initial state
-        if let Err(e) = tx.send(last_state).await {
-             log::error!("GPIO Input: Failed to send initial state: {}", e);
-             return Err(AppError::from(e)); // Return error if channel closed
-        }
+        log::info!("GPIO inputs initialized (Off: {}, On: {}, Quit: {}). Starting poll loop.", PIN_OFF, PIN_ON, PIN_QUIT);
+
+        // State tracking to detect changes
+        let mut last_off_state = false;
+        let mut last_on_state = false;
+        let mut last_quit_state = false;
 
         loop {
-            // Wait for an interrupt asynchronously
-             match pin.poll_interrupt(true, None) { // poll_interrupt waits for an edge
-                 Ok(Some(level)) => {
-                     // Edge detected, now debounce
-                     sleep(Duration::from_millis(DEBOUNCE_MS)).await;
-                     let current_level_after_debounce = pin.read();
+            let current_off_state = pin_off.is_high();
+            let current_on_state = pin_on.is_high();
+            let current_quit_state = pin_quit.is_high();
 
-                     if current_level_after_debounce == level {
-                         let new_state = level == Level::High;
-                         if new_state != last_state {
-                              log::info!("GPIO Input (Pin {}): State changed to {}", INPUT_PIN_BCM, if new_state { "HIGH" } else { "LOW" });
-                             last_state = new_state;
-                             if let Err(e) = tx.send(last_state).await {
-                                 log::error!("GPIO Input: Failed to send state update: {}", e);
-                                 // Decide whether to break or continue
-                                 break; // Exit if main task channel closed
-                             }
-                         } else {
-                            // log::trace!("GPIO Input (Pin {}): Debounce ignored spurious edge.", INPUT_PIN_BCM);
-                         }
-                     } else {
-                       // log::trace!("GPIO Input (Pin {}): State changed during debounce period.", INPUT_PIN_BCM);
-                     }
-                 }
-                 Ok(None) => {
-                     // Timeout occurred (if timeout was set in poll_interrupt)
-                    // log::trace!("GPIO Input (Pin {}): Poll interrupt timed out.", INPUT_PIN_BCM);
-                 }
-                 Err(rppal::gpio::Error::Interrupted) => {
-                     // Interrupted by signal, potentially continue
-                     log::warn!("GPIO Input (Pin {}): Poll interrupt interrupted.", INPUT_PIN_BCM);
-                     continue;
-                 }
-                 Err(e) => {
-                     log::error!("GPIO Input (Pin {}): Error polling interrupt: {}", INPUT_PIN_BCM, e);
-                     return Err(AppError::Gpio(e));
-                 }
-             }
-             // Small delay to prevent high CPU usage in case of continuous interrupts or errors
-              sleep(Duration::from_millis(10)).await;
-        }
-        Ok(())
-    }
-    #[cfg(not(any(target_arch = "arm", target_arch="aarch64")))]
-    {
-        // --- Placeholder for non-Raspberry Pi builds ---
-        log::warn!("GPIO input task running in placeholder mode (not on RPi).");
-        // Simulate state changes for testing if needed
-        let mut current_state = false;
-        loop {
-            sleep(Duration::from_secs(15)).await; // Simulate change every 15s
-            current_state = !current_state;
-            log::info!("GPIO Input (Placeholder): Simulating state change to {}", if current_state { "HIGH" } else { "LOW" });
-            if tx.send(current_state).await.is_err() {
-                log::error!("GPIO Input (Placeholder): Channel closed.");
-                break;
+            // --- Off Button Logic ---
+            if current_off_state && !last_off_state {
+                // Rising edge detected
+                sleep(DEBOUNCE_DURATION).await; // Wait for debounce
+                if pin_off.is_high() { // Re-check state after debounce
+                    log::debug!("Off button pressed (Pin {})", PIN_OFF);
+                    // Send command only once per press
+                    input_tx.send(SystemCommand::Off).map_err(|e| AppError::SendError(format!("Failed to send Off command: {}", e)))?;
+                    last_off_state = true; // Mark as pressed
+                }
+            } else if !current_off_state && last_off_state {
+                // Falling edge detected (button released)
+                 log::debug!("Off button released (Pin {})", PIN_OFF);
+                last_off_state = false; // Mark as released
             }
+
+            // --- On Button Logic ---
+            if current_on_state && !last_on_state {
+                sleep(DEBOUNCE_DURATION).await;
+                if pin_on.is_high() {
+                    log::debug!("On button pressed (Pin {})", PIN_ON);
+                    input_tx.send(SystemCommand::On).map_err(|e| AppError::SendError(format!("Failed to send On command: {}", e)))?;
+                    last_on_state = true;
+                }
+            } else if !current_on_state && last_on_state {
+                 log::debug!("On button released (Pin {})", PIN_ON);
+                last_on_state = false;
+            }
+
+            // --- Quit Button Logic ---
+            if current_quit_state && !last_quit_state {
+                sleep(DEBOUNCE_DURATION).await;
+                if pin_quit.is_high() {
+                    log::debug!("Quit button pressed (Pin {})", PIN_QUIT);
+                    input_tx.send(SystemCommand::Quit).map_err(|e| AppError::SendError(format!("Failed to send Quit command: {}", e)))?;
+                    last_quit_state = true;
+                }
+            } else if !current_quit_state && last_quit_state {
+                 log::debug!("Quit button released (Pin {})", PIN_QUIT);
+                last_quit_state = false;
+            }
+
+            // Prevent busy-waiting
+            sleep(POLL_INTERVAL).await;
         }
-        Ok(())
-       // Err(AppError::GpioUnavailable) // Or just run placeholder loop
+        // Note: The loop runs indefinitely. The Quit command signals other parts
+        // of the application via the channel, but doesn't stop this task directly.
+        // Consider adding a mechanism to gracefully shutdown this task if needed.
     }
 }
 
+// --- GPIO Output Task ---
+/// Controls LEDs based on commands received from `output_rx` and error signals from `error_rx`.
+pub async fn output_task(
+    error_rx: crossbeam_channel::Receiver<()>, // Original crossbeam receiver
+    output_rx: crossbeam_channel::Receiver<SystemCommand>, // Original crossbeam receiver
+) -> Result<(), AppError> {
 
-// --- GPIO Output Task (Controls Pin 22 - LED) ---
-pub async fn output_task(mut error_rx: crossbeam_channel::Receiver<()>, mut output_rx: crossbeam_channel::Receiver<SystemCommand>) -> Result<(), AppError> {
-    #[cfg(any(target_arch = "arm", target_arch="aarch64"))]
+    // --- Main Logic (using the bridge receivers) ---
     {
-        log::info!("Starting GPIO output task on BCM Pin {}", OUTPUT_PIN_BCM);
-        let gpio = Gpio::new()?;
-        let mut pin = gpio.get(OUTPUT_PIN_BCM)?.into_output();
+        log::info!("Initializing GPIO output task for Raspberry Pi...");
+        let gpio = Gpio::new().map_err(AppError::Gpio)?;
 
-        // Set initial state
-        pin.set_low();
-        log::info!("GPIO Output (Pin {}): Initialized to LOW.", OUTPUT_PIN_BCM);
+        // Configure output pins, initial level low (off)
+        let mut red_led = gpio.get(PIN_RED_LED)
+            .map_err(AppError::Gpio)?
+            .into_output_low(); // Initializes low
+        let mut green_led = gpio.get(PIN_GREEN_LED)
+            .map_err(AppError::Gpio)?
+            .into_output_low(); // Initializes low
+
+        log::info!("GPIO outputs initialized (Red: {}, Green: {}). Starting event loop.", PIN_RED_LED, PIN_GREEN_LED);
 
         loop {
-             match rx.recv().await {
-                 Ok(command) => {
-                     match command {
-                         SystemCommand::InvertersOff => {
-                             log::info!("GPIO Output (Pin {}): Setting HIGH (Inverters Off)", OUTPUT_PIN_BCM);
-                             pin.set_high();
-                         }
-                         SystemCommand::InvertersOn => {
-                              log::info!("GPIO Output (Pin {}): Setting LOW (Inverters On)", OUTPUT_PIN_BCM);
-                             pin.set_low();
-                         }
-                     }
-                 }
-                 Err(broadcast::error::RecvError::Closed) => {
-                     log::warn!("GPIO Output: Command channel closed. Exiting task.");
-                     break;
-                 }
-                 Err(broadcast::error::RecvError::Lagged(n)) => {
-                      log::warn!("GPIO Output: Lagged behind on command channel by {} messages.", n);
-                     // Continue receiving, skipping lagged messages
-                 }
-             }
+            crossbeam_channel::select! {
+                recv(error_rx) -> err_msg => {
+                    match err_msg {
+                        Ok(_) => {
+                            log::error!("Error signal received. Setting LEDs ON.");
+                            red_led.set_high();
+                            green_led.set_high();
+                        },
+                        Err(_) => {
+                            log::warn!("Error channel closed. Handling closure accordingly.");
+                            // Eventuell beenden oder eine alternative Logik verwenden
+                        }
+                    }
+                },
+                recv(output_rx) -> cmd_msg => {
+                    match cmd_msg {
+                        Ok(command) => {
+                            log::debug!("Received command: {:?}", command);
+                            match command {
+                                SystemCommand::On => {
+                                    log::info!("Setting Green LED ON, Red LED OFF.");
+                                    red_led.set_low();
+                                    green_led.set_high();
+                                },
+                                SystemCommand::Off => {
+                                    log::info!("Setting Red LED ON, Green LED OFF.");
+                                    red_led.set_high();
+                                    green_led.set_low();
+                                }
+                                _ => {}
+                            }
+                        },
+                        Err(_) => {
+                            log::error!("Output channel closed. Exiting loop.");
+                        }
+                    }
+                }
+            }
         }
-         Ok(())
 
-    }
-     #[cfg(not(any(target_arch = "arm", target_arch="aarch64")))]
-    {
-        // --- Placeholder for non-Raspberry Pi builds ---
-         log::warn!("GPIO output task running in placeholder mode (not on RPi).");
-         loop {
-             match rx.recv().await {
-                  Ok(command) => {
-                     log::info!("GPIO Output (Placeholder): Received command: {:?}", command);
-                     match command {
-                          SystemCommand::Off => log::info!("GPIO Output (Placeholder): Would set Pin {} HIGH", OUTPUT_PIN_BCM),
-                          SystemCommand::On => log::info!("GPIO Output (Placeholder): Would set Pin {} LOW", OUTPUT_PIN_BCM),
-                          _ => ()
-                     }
-                  }
-                  Err(broadcast::error::RecvError::Closed) => {
-                     log::warn!("GPIO Output (Placeholder): Command channel closed.");
-                     break;
-                  }
-                  Err(broadcast::error::RecvError::Lagged(n)) => {
-                       log::warn!("GPIO Output (Placeholder): Lagged behind on command channel by {} messages.", n);
-                  }
-             }
-         }
-         Ok(())
-         //Err(AppError::GpioUnavailable)
+        // If the loop breaks (e.g., by uncommenting 'break' under Quit command)
+        // log::info!("GPIO output task finished.");
+        // Ok(())
+
     }
 }

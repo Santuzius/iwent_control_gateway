@@ -46,6 +46,12 @@ pub enum AppError {
     #[error("Modbus client operation error: {0}")]
     ModbusClientOperation(#[from] tokio_modbus::prelude::ExceptionCode),
 
+    #[error("Channel send error: {0}")]
+    SendError(String),
+    
+    #[error("Channel receive error: {0}")]
+    ReceiveError(String),
+
     // Add other specific error types as needed
     #[error("Unknown error")]
     _Unknown,
