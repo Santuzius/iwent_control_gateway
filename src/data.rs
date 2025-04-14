@@ -138,7 +138,7 @@ impl BmsData {
                 // Validate if the u16 value fits into u8
                 match u8::try_from(value) {
                     Ok(val_u8) => {
-                        if self.control_frozen.unwrap_or(false) {
+                        if !self.control_frozen.unwrap_or(false) {
                             log::info!("Set REG_ON (addr {}) to {}", address, val_u8);
                             self.on = Some(val_u8);
                         } else {
@@ -161,7 +161,7 @@ impl BmsData {
                 // Validate if the u16 value fits into u8
                 match u8::try_from(value) {
                     Ok(val_u8) => {
-                        if self.control_frozen.unwrap_or(false) {
+                        if !self.control_frozen.unwrap_or(false) {
                             log::info!("Set REG_QUIT (addr {}) to {}", address, val_u8);
                             self.on = Some(val_u8);
                         } else {

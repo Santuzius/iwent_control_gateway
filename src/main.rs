@@ -1,7 +1,6 @@
 // src/main.rs
 use std::sync::{Arc, RwLock};
 use tokio::signal; // For graceful shutdown on Ctrl+C
-use tokio::time::{sleep, Duration};
 
 mod can;
 mod data;
@@ -21,24 +20,22 @@ pub enum SystemCommand {
     Quit
 }
 
-async fn reset_control_frozen(
+fn reset_control_frozen(
     bms_data1: Arc<RwLock<Option<BmsData>>>,
     bms_data2: Arc<RwLock<Option<BmsData>>>,
 ) -> Result<(), AppError> {
-    sleep(Duration::from_secs(1)).await;
+    std::thread::sleep(std::time::Duration::from_secs(1));
 
     {
         let mut data_guard1 = bms_data1.write().map_err(|_| AppError::LockPoisoned)?;
-        if let Some(data) = data_guard1.as_mut() {
-            data.control_frozen = Some(false);
-        }
+        let data = data_guard1.get_or_insert_default();
+        data.control_frozen = Some(false);
     }
 
     {
         let mut data_guard2 = bms_data2.write().map_err(|_| AppError::LockPoisoned)?;
-        if let Some(data) = data_guard2.as_mut() {
-            data.control_frozen = Some(false);
-        }
+        let data = data_guard2.get_or_insert_default();
+        data.control_frozen = Some(false);
     }
 
     log::debug!("Control frozen reset after 1 second.");
@@ -64,7 +61,7 @@ async fn input_flag_manager_task(
 
             match maybe_data1 {
                 Some(data) => {
-                    control_frozen1 = !data.control_frozen.unwrap();
+                    control_frozen1 = data.control_frozen.unwrap();
                 }
                 None => {
                     control_frozen1 = false;
@@ -84,7 +81,7 @@ async fn input_flag_manager_task(
 
             match maybe_data2 {
                 Some(data) => {
-                    control_frozen2 = !data.control_frozen.unwrap();
+                    control_frozen2 = data.control_frozen.unwrap();
                 }
                 None => {
                     control_frozen2 = false;
@@ -93,7 +90,7 @@ async fn input_flag_manager_task(
             }
         }
 
-        let control_frozen = control_frozen1 | control_frozen2;
+        let control_frozen = control_frozen1 || control_frozen2;
         if !control_frozen {
             {
                 let mut data_guard1 = bms_data1.write().map_err(|_| AppError::LockPoisoned)?;
@@ -109,14 +106,18 @@ async fn input_flag_manager_task(
                 log::debug!("Control for BMS 2 frozen.");
             }
 
-            let bms_data1_clone = bms_data1.clone();
-            let bms_data2_clone = bms_data2.clone();
-            tokio::spawn(async move {
-                if let Err(e) = reset_control_frozen(bms_data1_clone, bms_data2_clone).await {
-                    log::error!("Error resetting control_frozen: {}", e);
-                }
-            });
-            let _ = output_tx.send(msg);
+            let bms_data1_clone = Arc::clone(&bms_data1);
+            let bms_data2_clone = Arc::clone(&bms_data2);
+            std::thread::spawn(move || reset_control_frozen(bms_data1_clone, bms_data2_clone));
+            if let Err(e) = output_tx.send(msg.clone()) {
+                log::error!(
+                    "Error when sending {:#?}: {:?}",
+                    msg,
+                    e
+                );
+            } else {
+                log::debug!("{:#?} sent.", msg);
+            }
         }
     }
 

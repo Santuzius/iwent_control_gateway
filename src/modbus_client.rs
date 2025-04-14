@@ -3,7 +3,6 @@ use crate::error::AppError;
 use crate::SystemCommand;
 use std::{net::SocketAddr, time::Duration};
 use tokio::net::TcpStream;
-// Behalten Sie crossbeam für die Signatur bei, wenn nötig
 use tokio::time::sleep;
 use tokio_modbus::{
     client::*,
@@ -54,10 +53,10 @@ where
     Ok(())
 }
 
+
 // --- Modbus Client Task ---
 pub async fn task(
     addr_str: &str,
-    // Behalten Sie die crossbeam-Typen bei, wenn diese von außen kommen
     error_rx: crossbeam_channel::Receiver<()>,
     output_rx: crossbeam_channel::Receiver<SystemCommand>,
 ) -> Result<(), AppError> {
@@ -66,6 +65,9 @@ pub async fn task(
     }).unwrap();
 
     log::info!("Starting Modbus TCP client task for {}", socket_addr);
+
+    // Flag, um zu verfolgen, ob der error_rx-Kanal geschlossen ist
+    let mut error_rx_closed = false;
 
     loop {
         // --- Connection Loop (unverändert) ---
@@ -91,25 +93,19 @@ pub async fn task(
 
         // --- Command Processing Loop (while connected) ---
         'inner: loop {
-            // Clone receivers for use in spawn_blocking.
-            // crossbeam Receivers are Clone.
-            let output_rx_c = output_rx.clone();
-            let error_rx_c = error_rx.clone();
-
             tokio::select! {
                 biased; // Prioritize receiving commands/errors over keep-alive
 
-                // Wrap the blocking crossbeam recv in spawn_blocking
-                result = tokio::task::spawn_blocking(move || output_rx_c.recv()) => {
-                    // spawn_blocking returns a Result<T, JoinError> where T is the result of the closure
+                // --- output_rx branch ---
+                // Klonen und in spawn_blocking verschieben
+                result = { let rx = output_rx.clone(); tokio::task::spawn_blocking(move || rx.recv()) } => {
                     match result {
-                        // Closure finished successfully, check its Result
                         Ok(Ok(command)) => {
                             log::debug!("Modbus Client ({}): Received command: {:?}", socket_addr, command);
                             match command {
                                 SystemCommand::Off => {
                                     match execute_inverter_off_sequence(&mut ctx, &socket_addr).await {
-                                        Ok(_) => { /* Success logged in helper */ }
+                                        Ok(_) => { /* Success logged */ }
                                         Err(e) => {
                                             log::error!("Modbus Client ({}): OFF sequence failed during command execution: {}", socket_addr, e);
                                             break 'inner; // Reconnect on failure
@@ -124,47 +120,49 @@ pub async fn task(
                                 }
                             }
                         }
-                        // Closure finished, but recv returned an error (channel closed/disconnected)
                         Ok(Err(e)) => {
+                            // Wenn der *Befehlskanal* schließt, wollen wir wahrscheinlich beenden.
                             log::warn!("Modbus Client ({}): Command channel (output_rx) closed or disconnected: {}. Exiting task.", socket_addr, e);
-                            return Ok(()); // Graceful exit
+                            return Ok(()); // Task beenden, da keine Befehle mehr kommen können
                         }
-                        // The blocking task itself failed (e.g., panicked)
                         Err(e) => {
                             log::error!("Modbus Client ({}): Blocking task for output_rx failed: {}. Breaking connection.", socket_addr, e);
-                            break 'inner; // Treat as critical error, force reconnect attempt
+                            break 'inner; // Kritischer Fehler -> Reconnect
                         }
                     }
                 }
 
-                 // Wrap the blocking crossbeam recv in spawn_blocking
-                result = tokio::task::spawn_blocking(move || error_rx_c.recv()) => {
+                // --- error_rx branch (nur pollen, wenn nicht geschlossen) ---
+                // Syntax: future = ..., if condition
+                result = { let rx = error_rx.clone(); tokio::task::spawn_blocking(move || rx.recv()) }, if !error_rx_closed => {
                      match result {
-                        // Closure finished successfully, check its Result
-                        Ok(Ok(())) => { // Received the error signal ()
+                        Ok(Ok(())) => { // Signal empfangen
                             log::warn!("Modbus Client ({}): Received error signal. Executing OFF sequence...", socket_addr);
                              match execute_inverter_off_sequence(&mut ctx, &socket_addr).await {
-                                Ok(_) => { /* Success logged in helper */ }
+                                Ok(_) => { /* Success logged */ }
                                 Err(e) => {
                                     log::error!("Modbus Client ({}): OFF sequence failed after error signal: {}", socket_addr, e);
-                                    break 'inner; // Reconnect on failure
+                                    // Brechen Sie die Verbindung ab, wenn die *Ausführung* der OFF-Sequenz fehlschlägt
+                                    break 'inner;
                                 }
                             }
                         }
-                        // Closure finished, but recv returned an error (channel closed/disconnected)
-                        Ok(Err(e)) => {
-                             log::warn!("Modbus Client ({}): Error channel (error_rx) closed or disconnected: {}. Exiting task.", socket_addr, e);
-                            return Ok(()); // Graceful exit
+                        Ok(Err(e)) => { // Kanal wurde geschlossen (recv-Fehler)
+                             log::warn!("Modbus Client ({}): Error channel (error_rx) closed or disconnected: {}. Will stop listening on this channel.", socket_addr, e);
+                             // Setze Flag, damit dieser Zweig nicht mehr abgefragt wird
+                             error_rx_closed = true;
+                             // NICHT `return` oder `break`! Einfach weiterlaufen lassen.
                         }
-                        // The blocking task itself failed (e.g., panicked)
-                        Err(e) => {
-                             log::error!("Modbus Client ({}): Blocking task for error_rx failed: {}. Breaking connection.", socket_addr, e);
-                            break 'inner; // Treat as critical error, force reconnect attempt
+                        Err(e) => { // spawn_blocking-Task selbst fehlgeschlagen
+                             log::error!("Modbus Client ({}): Blocking task for error_rx failed: {}. Assuming channel unusable.", socket_addr, e);
+                             // Setze Flag, damit dieser Zweig nicht mehr abgefragt wird
+                             error_rx_closed = true;
+                             // NICHT `return` oder `break`! Einfach weiterlaufen lassen.
                         }
                     }
                 }
 
-                // Keep-alive check (unverändert)
+                // --- Keep-alive branch (unverändert) ---
                 _ = sleep(Duration::from_secs(30)) => {
                      match ctx.read_holding_registers(40070, 1).await { // Example register
                         Ok(_) => { /* Connection seems okay */ }
@@ -182,5 +180,7 @@ pub async fn task(
             "Modbus Client ({}): Connection lost or error occurred. Reconnecting...",
             socket_addr
         );
+        // Ggf. kurze Pause vor dem Neuverbindungsversuch einfügen
+        // sleep(Duration::from_secs(1)).await;
     } // end outer loop (reconnection)
 }
