@@ -1,7 +1,8 @@
 // src/modbus_server.rs
 use crate::{
+    SystemCommand,
     data::BmsData, // Import specific register constants
-    error::AppError, SystemCommand,
+    error::AppError,
 };
 use std::{
     future::Future,
@@ -20,7 +21,7 @@ use tokio_modbus::{
 #[derive(Debug, Clone)] // Added Clone trait, needed for the service factory pattern
 struct BmsModbusService {
     bms_data: Arc<RwLock<Option<BmsData>>>,
-    input_tx: std::sync::mpsc::Sender<SystemCommand>
+    input_tx: std::sync::mpsc::Sender<SystemCommand>,
 }
 
 // Implement Service trait
@@ -126,6 +127,30 @@ impl tokio_modbus::server::Service for BmsModbusService {
                     // Get mutable reference, initializing if None
                     let data_ref = data_guard.get_or_insert_with(BmsData::default);
 
+                    if addr == 21 {
+                        if value == 0 {
+                            if let Err(e) = input_tx.send(SystemCommand::Off) {
+                                log::error!(
+                                    "Error when sending {:#?}: {:?}",
+                                    SystemCommand::Off,
+                                    e
+                                );
+                            } else {
+                                log::debug!("{:#?} sent.", SystemCommand::Off);
+                            }
+                        } else if let Err(e) = input_tx.send(SystemCommand::On) {
+                            log::error!("Error when sending {:#?}: {:?}", SystemCommand::On, e);
+                        } else {
+                            log::debug!("{:#?} sent.", SystemCommand::On);
+                        }
+                    } else if addr == 22 && value != 0 {
+                        if let Err(e) = input_tx.send(SystemCommand::Quit) {
+                            log::error!("Error when sending {:#?}: {:?}", SystemCommand::Quit, e);
+                        } else {
+                            log::debug!("{:#?} sent.", SystemCommand::Quit);
+                        }
+                    }
+
                     // Use the new set_register method which handles validation and updates
                     match data_ref.set_register(addr, value) {
                         Ok(()) => {
@@ -148,6 +173,31 @@ impl tokio_modbus::server::Service for BmsModbusService {
                     let data_ref = data_guard.get_or_insert_with(BmsData::default);
                     for (i, value) in values.iter().enumerate() {
                         let current_addr = addr + i as u16;
+
+                        if current_addr == 21 {
+                            if *value == 0 {
+                                if let Err(e) = input_tx.send(SystemCommand::Off) {
+                                    log::error!(
+                                        "Error when sending {:#?}: {:?}",
+                                        SystemCommand::Off,
+                                        e
+                                    );
+                                } else {
+                                    log::debug!("{:#?} sent.", SystemCommand::Off);
+                                }
+                            } else if let Err(e) = input_tx.send(SystemCommand::On) {
+                                log::error!("Error when sending {:#?}: {:?}", SystemCommand::On, e);
+                            } else {
+                                log::debug!("{:#?} sent.", SystemCommand::On);
+                            }
+                        } else if current_addr == 22 && *value != 0 {
+                            if let Err(e) = input_tx.send(SystemCommand::Quit) {
+                                log::error!("Error when sending {:#?}: {:?}", SystemCommand::Quit, e);
+                            } else {
+                                log::debug!("{:#?} sent.", SystemCommand::Quit);
+                            }
+                        }
+
                         if let Err(e) = data_ref.set_register(current_addr, *value) {
                             // Decide on error handling: stop immediately or continue?
                             // Modbus standard often expects an error on the first failure.
@@ -157,16 +207,6 @@ impl tokio_modbus::server::Service for BmsModbusService {
                                 e
                             );
                             return Err(e); // Return the specific error
-                        }
-                        if current_addr == 21 {
-                            if *value == 0 {
-                                let _ = input_tx.send(SystemCommand::Off);
-                            }
-                            else {
-                                let _ = input_tx.send(SystemCommand::On);
-                            }
-                        } else if  current_addr == 22 && *value != 0 {
-                            let _ = input_tx.send(SystemCommand::Quit);
                         }
                     }
                     Ok(Response::WriteMultipleRegisters(addr, values.len() as u16))
@@ -188,7 +228,7 @@ impl tokio_modbus::server::Service for BmsModbusService {
 pub async fn task(
     addr_str: &str,
     bms_data: Arc<RwLock<Option<BmsData>>>,
-    input_tx: std::sync::mpsc::Sender<SystemCommand>
+    input_tx: std::sync::mpsc::Sender<SystemCommand>,
 ) -> Result<(), AppError> {
     let socket_addr: SocketAddr = addr_str.parse().unwrap();
     log::info!("Starting Modbus TCP server on {}", socket_addr);
@@ -204,7 +244,7 @@ pub async fn task(
         Ok(Some(BmsModbusService {
             // Clone the Arc here, so the new service instance gets a pointer to the shared data
             bms_data: Arc::clone(&bms_data),
-            input_tx: input_tx.clone()
+            input_tx: input_tx.clone(),
         }))
     };
 
